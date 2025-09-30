@@ -1,0 +1,180 @@
+---
+- hosts: proxmox-a-0
+  gather_facts: no
+  vars:
+    development: true
+    cloud_image_url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+    cloud_image_filename: noble-server-cloudimg-amd64.img
+    auth:
+      user: "YOUR_USER"
+      password: "YOUR_PASSWORD"
+      public_ssh_key: "YOUR_PUBLIC_SSH_KEY"
+    locations:
+      iso:            '/var/lib/vz/template/iso/'
+      snippets:       '/var/lib/vz/snippets/'
+      tmp:            '/tmp/'
+      drive_snippets: 'local'
+      drive_disks:    'local-lvm'
+    vm:
+      id: 28000
+      name: test-Ubuntu2404-server
+      ostype: l26
+      disk_size: 10G
+      net0: virtio,bridge=vmbr0
+      ipconfig0: 'ip=dhcp'
+      cpu_type: host
+      cores: 2
+      memory: 4096
+      memory_balloon: 2048
+      bios: seabios
+      description: This is a test linux server
+    cloud_init_vendor_txt: |
+          #cloud-config
+          update: yes
+          locale: en_GB
+          keyboard:
+            layout: gb
+            variant: extd
+          ssh:
+            allow-pw: true
+            install-server: true
+          packages:
+            - curl
+            - git
+            - qemu-guest-agent
+          package_update: true
+          package_upgrade: true 
+          output: { all : '| tee -a /var/log/cloud-init-output.log' }     
+          runcmd:
+            - date
+            - systemctl enable qemu-guest-agent
+            - touch /etc/cloud/cloud-init.disabled
+            - reboot
+
+  tasks:
+    - name: clean up past VM if development var is true
+      block:
+        - name: kill test VM
+          shell: 'qm stop {{ vm.id }}'
+          failed_when: false
+          ignore_errors: true
+
+        - name: delete test VM
+          shell: 'qm destroy {{ vm.id }}'
+          failed_when: false
+          ignore_errors: true
+
+        - name: Give the server time to clean up eveything
+          pause:
+            seconds: 5
+          when: not ansible_check_mode
+      when: development == true
+    
+    - name: Check if VM already exists
+      shell: 'qm status {{ vm.id }}'
+      register: result
+      failed_when: false
+      ignore_errors: true
+    
+    - name: fail script if VM already exists
+      fail: msg="The VM with id {{ vm.id }} already exists"
+      when: result.rc == 0
+
+    - name: Check for img file
+      stat:
+         path: '{{ locations.iso }}{{ cloud_image_filename }}'
+      register: stat_result
+            
+    - name: Download cloud image if it does not already exist {{ locations.iso }}
+      get_url:
+         url: '{{ cloud_image_url }}'
+         dest: '{{ locations.iso }}{{ cloud_image_filename }}'
+      when: not stat_result.stat.exists
+
+    - name: Create cloudinit script from variable as a snippet {{ locations.snippets }}
+      copy:
+        content: '{{ cloud_init_vendor_txt }}'
+        dest: '{{ locations.snippets }}/cloudinit_{{ vm.id }}_vendor.yaml'
+ 
+    - name: Create public-ssh-key
+      copy:
+        content: '{{ auth.public_ssh_key }}'
+        dest: '{{ locations.tmp }}public-ssh-key.pub'
+
+    - name: Create VM
+      shell:
+        cmd: >
+          qm create {{ vm.id }}
+          --name {{ vm.name }} 
+          --boot order=scsi0
+          --serial0 socket --vga serial0
+          --memory 2048
+          --agent enabled=1,fstrim_cloned_disks=1
+          --cores {{ vm.cores }}
+          --net0 virtio,bridge=vmbr0
+          --scsihw virtio-scsi-single
+          --ide2 {{ locations.drive_disks }}:cloudinit
+          --sshkeys /tmp/public-ssh-key.pub
+          --ciuser {{ auth.user }}
+          --cipassword {{ auth.password }}
+          --bios {{ vm.bios }}
+          --ostype {{ vm.ostype }}
+          --tags {{ cloud_image_filename }},cloudinit
+
+    - name: Place the defined cloudinit values into the vendor sub-grouping
+      shell: 'qm set {{ vm.id }} --cicustom "vendor={{ locations.drive_snippets }}:snippets/cloudinit_{{ vm.id }}_vendor.yaml"'
+
+    - name: Import disk to VM
+      shell: 'qm disk import {{ vm.id }} {{ locations.iso }}{{ cloud_image_filename }} {{ locations.drive_disks }} --format raw'
+
+    - name: Set Imported disk on the VM
+      shell: 'qm set {{ vm.id }}  --virtio0 {{ locations.drive_disks }}:vm-{{ vm.id }}-disk-0,discard=on,iothread=1,backup=1'
+          
+    - name: Remove public-ssh-key
+      file:
+        path: '{{ locations.tmp }}public-ssh-key.pub'
+        state: absent
+
+    - name: Set Disk size if defined
+      shell: 'qm resize {{ vm.id }} virtio0 {{ vm.disk_size }}'
+      when: vm.disk_size is defined
+
+    - name: Set CPU core number if defined
+      shell: 'qm set {{ vm.id }} --cores {{ vm.cores }}'
+      when: vm.cores is defined
+
+    - name: Set cpu type configuration if defined
+      shell: 'qm set {{ vm.id }} --cpu {{ vm.cpu_type }}'
+      when: vm.cpu_type is defined
+          
+    - name: Set Memory configuration if defined
+      shell: 'qm set {{ vm.id }} --memory {{ vm.memory }}'
+      when: vm.memory is defined
+
+    - name: Set Balloon Memory configuration if defined
+      shell: 'qm set {{ vm.id }} --balloon {{ vm.memory_balloon }}'
+      when: vm.memory_balloon is defined
+
+    - name: Set network settings if defined
+      shell: 'qm set {{ vm.id }} --net0 {{ vm.net0 }}'
+      when: vm.net0 is defined
+
+    - name: Set IP configuration if defined
+      shell: 'qm set {{ vm.id }} --ipconfig0 {{ vm.ipconfig0 }}'
+      when: vm.ipconfig0 is defined
+          
+    - name: Set OS type if defined
+      shell: 'qm set {{ vm.id }} --ostype {{ vm.ostype }}'
+      when: vm.ostype is defined 
+
+    - name: Set VM Description if defined (these are shown as the VM notes in web GUI)
+      shell: 'qm set {{ vm.id }} --description "{{ vm.description }}"'
+      when: vm.description is defined 
+      
+    - name: Give the server time to complete all setup tasks
+      pause:
+        seconds: 5
+      when: not ansible_check_mode
+      
+    - name: Start VM {{ vm.id }} to allow cloudinit to run (and to catch any setup errors)
+      shell: 'qm start {{ vm.id }}'
