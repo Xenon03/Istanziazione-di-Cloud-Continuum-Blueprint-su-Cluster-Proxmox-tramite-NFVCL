@@ -12,3 +12,14 @@
   become: true
   roles:
     - node3
+
+- name: Wait for SSH on all hosts
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Wait for SSH to come up
+      ansible.builtin.wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 22
+        timeout: 300  # massimo 5 minuti
+        state: started

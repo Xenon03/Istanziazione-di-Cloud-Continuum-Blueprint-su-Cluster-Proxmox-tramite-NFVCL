@@ -5,6 +5,7 @@ from jinja2 import Template
 import urllib3
 import random
 import time
+import socket
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -31,6 +32,9 @@ def get_ticket():
     r.raise_for_status()
     result = r.json()["data"]
     return result["ticket"], result["CSRFPreventionToken"]
+
+
+
 
 def create_vm_proxmox(vm, ticket, csrf):
     """
@@ -107,7 +111,17 @@ def create_vm_proxmox(vm, ticket, csrf):
 
     return vmid
 
-
+def wait_for_ssh(ip, port=22, retries=20, delay=15):
+    for attempt in range(1, retries + 1):
+        try:
+            s = socket.create_connection((ip, port), timeout=5)
+            s.close()
+            print(f"[INFO] SSH pronto su {ip}")
+            return True
+        except Exception as e:
+            print(f"[WARNING] Tentativo {attempt}: SSH non pronto su {ip}, riprovo tra {delay}s")
+            time.sleep(delay)
+    raise Exception(f"[ERROR] SSH non disponibile su {ip} dopo {retries*delay} secondi")
 
 def generate_ansible_inventory(blueprint, template_path, output_path):
     with open(template_path) as f:
@@ -121,7 +135,11 @@ def run_ansible_playbook():
     cmd = ["ansible-playbook", "-i", ANSIBLE_INVENTORY_OUTPUT, ANSIBLE_PLAYBOOK]
     subprocess.run(cmd, check=True)
 
+
+
 def cleanup_vms(vmid_map, ticket, csrf):
+    print("[INFO] Eliminazione VM (cleanup via API) disabilitata")
+    '''
     print("[INFO] Eliminazione VM (cleanup via API)")
     headers = {"Cookie": f"PVEAuthCookie={ticket}", "CSRFPreventionToken": csrf}
     for name, vmid in vmid_map.items():
@@ -141,6 +159,7 @@ def cleanup_vms(vmid_map, ticket, csrf):
             print(f"[INFO] Destroy VM {name}: {r.status_code}")
         except Exception as e:
             print(f"[WARNING] Fallito destroy VM {name}: {e}")
+    '''
 
 # --------------- Main -------------------
 
@@ -153,6 +172,7 @@ if __name__ == "__main__":
         for vm in blueprint["Resources"]:
             vmid = create_vm_proxmox(vm, ticket, csrf)
             vmid_map[vm["name"]] = vmid
+            wait_for_ssh(vm['ip'])  # aspetta SSH prima di procedere
 
         generate_ansible_inventory(blueprint, ANSIBLE_INVENTORY_TEMPLATE, ANSIBLE_INVENTORY_OUTPUT)
         run_ansible_playbook()
