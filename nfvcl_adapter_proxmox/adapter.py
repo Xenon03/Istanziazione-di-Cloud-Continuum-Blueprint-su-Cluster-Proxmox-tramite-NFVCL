@@ -15,8 +15,13 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 PROXMOX_URL = "https://192.168.1.81:8006/api2/json"
 PROXMOX_NODE = "pve"
 PROXMOX_USER = "root@pam"
+<<<<<<< HEAD
 PROXMOX_PASS = open(os.path.expandvars("$HOME/.prox-cred/password")).read().strip()
 PROXMOX_SSH_PUB = open(os.path.expandvars("$HOME/.ssh/id_rsa.pub")).read().strip()
+=======
+PROXMOX_PASS = "YOUR_PASSWORD"
+PROXMOX_SSH_PUB = open("$HOME/.ssh/id_rsa.pub").read()
+>>>>>>> 579f3e71a44e19fc0cd5ae0f9428b0abd749dc10
 TEMPLATE_ID = 9000   # ID del template cloud-init già pronto
 ANSIBLE_PLAYBOOK = "site.yaml"
 ANSIBLE_INVENTORY_TEMPLATE = "ansible_inventory.j2"
