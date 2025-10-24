@@ -1,2 +1,0 @@
-[proxmox]
-proxmox-a-0 ansible_host=192.168.1.81 ansible_user=root ansible_password=Angi2703

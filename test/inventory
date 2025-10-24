@@ -1,2 +1,0 @@
-[proxmox]
-proxmox-a-0 ansible_host=YOUR_IP ansible_user=YOUR_USER ansible_password=YOUR_PASSWORD
