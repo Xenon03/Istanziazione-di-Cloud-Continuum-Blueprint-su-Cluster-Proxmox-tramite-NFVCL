@@ -45,6 +45,7 @@ Il blueprint definisce tre macchine virtuali:
       +------------------+                             +------------------+
 
 ## Struttura della repository
+```
 ├── blueprints/
 │ └── experiment_exp1a.yaml # Blueprint principale del cluster
 ├── deployments/ # Manifest Kubernetes / Helm Charts
@@ -56,6 +57,7 @@ Il blueprint definisce tre macchine virtuali:
 ├── site.yaml # Playbook Ansible per la configurazione
 ├── README.md # Questo file
 └── docs/ # Eventuali materiali di tesi o diagrammi
+```
 
 
 ## Prerequisiti
