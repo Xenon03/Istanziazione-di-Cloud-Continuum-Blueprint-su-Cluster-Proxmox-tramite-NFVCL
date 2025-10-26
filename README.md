@@ -14,7 +14,7 @@ L'obiettivo è riprodurre e generalizzare il comportamento del **Vagrantfile ori
 
 ---
 
-## 🧱 Architettura generale
+## Architettura generale
 
 Il blueprint definisce tre macchine virtuali:
 
@@ -58,7 +58,7 @@ Il blueprint definisce tre macchine virtuali:
 └── docs/ # Eventuali materiali di tesi o diagrammi
 
 
-### Prerequisiti
+## Prerequisiti
 - **NFVCL** correttamente installato e configurato  
 - **Proxmox VE** con API accessibili (porta `8006`)  
 - Accesso SSH via chiave pubblica (`~/.ssh/id_rsa.pub`)  
