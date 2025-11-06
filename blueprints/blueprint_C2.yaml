@@ -1,5 +1,5 @@
 ExperimentName: exp1a
-Description: "Blueprint completo per cluster Proxmox basato sul Vagrantfile originale"
+Description: "Cloud Continuum Blueprint - Cluster 2"
 Version: 1.0
 Author: 
   name: Federico Balistreri
@@ -12,7 +12,7 @@ Networks:
     gateway: 192.168.1.1
 
 Resources:
-  - name: fedcontr
+  - name: fedcontr_2
     type: vm
     properties:
       provider: proxmox 
@@ -59,8 +59,8 @@ Resources:
                       virtualCpu: 2
                       experimentGroup: experiment1
 
-  - name: node2
-    depends_on: [fedcontr]
+  - name: node2_2
+    depends_on: [fedcontr_2]
     type: vm
     properties:
       provider: proxmox 
@@ -92,8 +92,8 @@ Resources:
         - name: compositeResources
           deploy_path: ./deployments/compositeResources
 
-  - name: node3
-    depends_on: [fedcontr]
+  - name: node3_2
+    depends_on: [fedcontr_2]
     type: vm
     properties:
       provider: proxmox 
@@ -124,3 +124,4 @@ Resources:
           deploy_path: ./deployments/couchDBsyncoperator
         - name: compositeResources
           deploy_path: ./deployments/compositeResources
+

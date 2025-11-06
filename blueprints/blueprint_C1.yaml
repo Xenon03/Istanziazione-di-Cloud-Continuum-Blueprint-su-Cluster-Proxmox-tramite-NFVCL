@@ -1,0 +1,127 @@
+ExperimentName: exp1a
+Description: "Cloud Continuum Blueprint - Cluster 1"
+Version: 1.0
+Author: 
+  name: Federico Balistreri
+  email: federico.balistreri@studio.unibo.it
+Date: 2025-10-26
+
+Networks:
+  - name: mgmt
+    subnet: 192.168.1.0/24
+    gateway: 192.168.1.1
+
+Resources:
+  - name: fedcontr_1
+    type: vm
+    properties:
+      provider: proxmox 
+      cpu: 2
+      memory: 4192
+      network: mgmt
+      ip: 192.168.1.100
+    role: fedcontr
+    services:
+      platform: []
+      application:
+        - name: keycloak
+          port: 8443
+          image: quay.io/keycloak/keycloak:26.0.7
+          env:
+            KC_BOOTSTRAP_ADMIN_USERNAME: admin
+            KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+          files:
+            - source: keycloak.key
+              destination: /cert/key.pem
+              type: secret
+            - source: keycloak.crt
+              destination: /cert/cert.pem
+            - source: realm.json
+              destination: /import/realm.json
+        - name: couchdb
+          port: 5984
+          image: couchdb:3.4.2
+          env:
+            COUCHDB_USER: admin
+            COUCHDB_PASSWORD: password
+          init:
+            create_dbs:
+              - name: experiments
+                documents:
+                  - id: experiment1
+                    ExperimentName: exp1a
+                    ExperimentGroup: experiment1
+                    EndTime: "1/1/1"
+                    SiteID: bologna1
+                    ResourceKind: xslicenamespaces.experiment.mmwunibo.it
+                    ResourceObject:
+                      virtualMemory: 4Gb
+                      virtualCpu: 2
+                      experimentGroup: experiment1
+
+  - name: node2_1
+    depends_on: [fedcontr_1]
+    type: vm
+    properties:
+      provider: proxmox 
+      cpu: 2
+      memory: 4192
+      network: mgmt
+      ip: 192.168.1.101
+    role: node2
+    services:
+      platform:
+        - name: k3s
+          args:
+            - "--kube-apiserver-arg=oidc-ca-file=/home/vagrant/rootCA.crt"
+            - "--kube-apiserver-arg=oidc-groups-claim=groups"
+            - "--kube-apiserver-arg=oidc-issuer-url=https://192.168.1.100:8443/realms/kubernetes"
+            - "--kube-apiserver-arg=oidc-client-id=bologna1"
+            - "--kube-apiserver-arg=oidc-username-claim=sub"
+            - "--bind-address=0.0.0.0"
+        - name: crossplane
+          namespace: crossplane-system
+          helm_chart: crossplane-stable/crossplane
+      application:
+        - name: experiment-provider
+          deploy_path: ./deployments/experiment-provider
+        - name: kubernetes-provider
+          deploy_path: ./deployments/kubernetes-provider
+        - name: couchDBsyncoperator
+          deploy_path: ./deployments/couchDBsyncoperator
+        - name: compositeResources
+          deploy_path: ./deployments/compositeResources
+
+  - name: node3_1
+    depends_on: [fedcontr_1]
+    type: vm
+    properties:
+      provider: proxmox 
+      cpu: 2
+      memory: 4192
+      network: mgmt
+      ip: 192.168.1.102
+    role: node3
+    services:
+      platform:
+        - name: k3s
+          args:
+            - "--kube-apiserver-arg=oidc-ca-file=/home/vagrant/rootCA.crt"
+            - "--kube-apiserver-arg=oidc-groups-claim=groups"
+            - "--kube-apiserver-arg=oidc-issuer-url=https://192.168.1.100:8443/realms/kubernetes"
+            - "--kube-apiserver-arg=oidc-client-id=bologna1"
+            - "--kube-apiserver-arg=oidc-username-claim=sub"
+            - "--bind-address=0.0.0.0"
+        - name: crossplane
+          namespace: crossplane-system
+          helm_chart: crossplane-stable/crossplane
+      application:
+        - name: experiment-provider
+          deploy_path: ./deployments/experiment-provider
+        - name: kubernetes-provider
+          deploy_path: ./deployments/kubernetes-provider
+        - name: couchDBsyncoperator
+          deploy_path: ./deployments/couchDBsyncoperator
+        - name: compositeResources
+          deploy_path: ./deployments/compositeResources
+
