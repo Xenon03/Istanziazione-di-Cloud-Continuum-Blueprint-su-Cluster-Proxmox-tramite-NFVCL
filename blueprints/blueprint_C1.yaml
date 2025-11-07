@@ -1,3 +1,13 @@
+# Blueprint Cluster 1 (Cluster A)
+# ======================================================
+# Questo blueprint definisce il primo cluster del Cloud Continuum.
+# Comprende tre VM:
+# - fedcontr_1 : nodo controller (Keycloak + CouchDB)
+# - node2_1 : primo nodo worker con K3s e Crossplane
+# - node3_1 : secondo nodo worker con K3s e Crossplane
+# La rete è unica (mgmt) e si trova nella subnet 192.168.1.0/24.
+# ======================================================
+
 ExperimentName: exp1a
 Description: "Cloud Continuum Blueprint - Cluster 1"
 Version: 1.0
@@ -6,12 +16,14 @@ Author:
   email: federico.balistreri@studio.unibo.it
 Date: 2025-10-26
 
+# Rete di management usata da tutte le VM del cluster
 Networks:
   - name: mgmt
     subnet: 192.168.1.0/24
     gateway: 192.168.1.1
 
 Resources:
+  # Nodo controller del cluster
   - name: fedcontr_1
     type: vm
     properties:
@@ -19,12 +31,14 @@ Resources:
       cpu: 2
       memory: 4192
       network: mgmt
-      ip: 192.168.1.100
+      ip: 192.168.1.100    # IP del nodo controller
+
     role: fedcontr
     services:
-      platform: []
+      platform: []         # Nessun servizio platform (docker/k8s) sul controller
       application:
-        - name: keycloak
+        # Identity provider del cluster
+        - name: keycloak   
           port: 8443
           image: quay.io/keycloak/keycloak:26.0.7
           env:
@@ -38,6 +52,7 @@ Resources:
               destination: /cert/cert.pem
             - source: realm.json
               destination: /import/realm.json
+        # Database distribuito tra i cluster
         - name: couchdb
           port: 5984
           image: couchdb:3.4.2
@@ -48,6 +63,7 @@ Resources:
             create_dbs:
               - name: experiments
                 documents:
+                  # Entry iniziale del database
                   - id: experiment1
                     ExperimentName: exp1a
                     ExperimentGroup: experiment1
@@ -58,19 +74,21 @@ Resources:
                       virtualMemory: 4Gb
                       virtualCpu: 2
                       experimentGroup: experiment1
-
+  # Primo worker del cluster
   - name: node2_1
-    depends_on: [fedcontr_1]
+    depends_on: [fedcontr_1]  # Il worker si crea solo dopo il controller
     type: vm
     properties:
       provider: proxmox 
       cpu: 2
       memory: 4192
       network: mgmt
-      ip: 192.168.1.101
+      ip: 192.168.1.101       # IP del primo worker
+
     role: node2
     services:
       platform:
+        # Installazione di K3s (Kubernetes lightweight)
         - name: k3s
           args:
             - "--kube-apiserver-arg=oidc-ca-file=/home/vagrant/rootCA.crt"
@@ -79,9 +97,13 @@ Resources:
             - "--kube-apiserver-arg=oidc-client-id=bologna1"
             - "--kube-apiserver-arg=oidc-username-claim=sub"
             - "--bind-address=0.0.0.0"
+
+        # Crossplane per provisioning Kubernetes e risorse cloud
         - name: crossplane
           namespace: crossplane-system
           helm_chart: crossplane-stable/crossplane
+
+      # Componenti applicativi deployati sul cluster
       application:
         - name: experiment-provider
           deploy_path: ./deployments/experiment-provider
@@ -91,7 +113,8 @@ Resources:
           deploy_path: ./deployments/couchDBsyncoperator
         - name: compositeResources
           deploy_path: ./deployments/compositeResources
-
+  
+  # Secondo worker del cluster
   - name: node3_1
     depends_on: [fedcontr_1]
     type: vm
@@ -100,10 +123,12 @@ Resources:
       cpu: 2
       memory: 4192
       network: mgmt
-      ip: 192.168.1.102
+      ip: 192.168.1.102   # IP del secondo worker
+
     role: node3
     services:
       platform:
+        # Identica configurazione OIDC del nodo2
         - name: k3s
           args:
             - "--kube-apiserver-arg=oidc-ca-file=/home/vagrant/rootCA.crt"
@@ -112,9 +137,12 @@ Resources:
             - "--kube-apiserver-arg=oidc-client-id=bologna1"
             - "--kube-apiserver-arg=oidc-username-claim=sub"
             - "--bind-address=0.0.0.0"
+
         - name: crossplane
           namespace: crossplane-system
           helm_chart: crossplane-stable/crossplane
+
+      # Componenti identici al nodo2 
       application:
         - name: experiment-provider
           deploy_path: ./deployments/experiment-provider
