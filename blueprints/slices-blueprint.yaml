@@ -1,0 +1,258 @@
+# =========================
+# Cloud Continuum Blueprint
+# =========================
+# Questo manifest riproduce l’intera configurazione del progetto “Slices Blueprint”
+# adattata per un cluster K3s già attivo (es. creato tramite NFVCL).
+# Include: Keycloak, CouchDB, Crossplane, Provider Experiment, Provider Kubernetes, Jenkins SA.
+
+# ------------------------------------------------------------------------------
+# 1. Namespace e base di sistema
+# ------------------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: crossplane-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: slice1experiment1
+
+# ------------------------------------------------------------------------------
+# 2. Certificati Keycloak
+# ------------------------------------------------------------------------------
+# ⚙️ Prima di applicare questo file, assicurati di aver generato i certificati:
+# ./generate-certs.sh <KEYCLOAK_IP>
+# poi caricali con:
+# kubectl create secret generic keycloak-certificates \
+#   --from-file=keycloak.crt \
+#   --from-file=keycloak.key \
+#   --from-file=rootCA.crt \
+#   -n default
+# ------------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm
+  namespace: default
+data:
+  realm.json: |
+    {
+      "realm": "kubernetes",
+      "enabled": true,
+      "clients": [
+        {
+          "clientId": "bologna1",
+          "redirectUris": ["*"],
+          "publicClient": true
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:26.0.7
+        args:
+          - start
+          - --https-certificate-file=/cert/keycloak.crt
+          - --https-certificate-key-file=/cert/keycloak.key
+          - --hostname-strict=false
+          - --import-realm
+        env:
+          - name: KC_BOOTSTRAP_ADMIN_USERNAME
+            value: "admin"
+          - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+            value: "admin"
+        ports:
+          - containerPort: 8443
+        volumeMounts:
+          - name: keycloak-certs
+            mountPath: /cert
+          - name: keycloak-import
+            mountPath: /opt/keycloak/data/import
+      volumes:
+      - name: keycloak-certs
+        secret:
+          secretName: keycloak-certificates
+      - name: keycloak-import
+        configMap:
+          name: keycloak-realm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: default
+spec:
+  selector:
+    app: keycloak
+  ports:
+  - port: 8443
+    targetPort: 8443
+    name: https
+  type: NodePort
+
+# ------------------------------------------------------------------------------
+# 3. CouchDB
+# ------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: couchdb
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: couchdb
+  template:
+    metadata:
+      labels:
+        app: couchdb
+    spec:
+      containers:
+      - name: couchdb
+        image: couchdb:3.4.2
+        env:
+          - name: COUCHDB_USER
+            value: admin
+          - name: COUCHDB_PASSWORD
+            value: password
+        ports:
+          - containerPort: 5984
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: couchdb
+  namespace: default
+spec:
+  selector:
+    app: couchdb
+  ports:
+    - port: 5984
+      targetPort: 5984
+  type: ClusterIP
+
+# ------------------------------------------------------------------------------
+# 4. Crossplane (installazione automatica tramite HelmChart CR)
+# ------------------------------------------------------------------------------
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: crossplane
+  namespace: kube-system
+spec:
+  chart: crossplane
+  repo: https://charts.crossplane.io/stable
+  targetNamespace: crossplane-system
+  createNamespace: true
+  valuesContent: |
+    args:
+      - --enable-composition-revisions
+    leaderElection: true
+
+# ------------------------------------------------------------------------------
+# 5. Provider Kubernetes
+# ------------------------------------------------------------------------------
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-kubernetes
+spec:
+  package: xpkg.upbound.io/crossplane/provider-kubernetes:v0.9.0
+---
+apiVersion: kubernetes.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: in-cluster
+spec:
+  credentials:
+    source: InjectedIdentity
+
+# ------------------------------------------------------------------------------
+# 6. CouchDB Sync Operator
+# ------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: couchdbsyncoperator
+  namespace: crossplane-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: couchdbsyncoperator
+  template:
+    metadata:
+      labels:
+        app: couchdbsyncoperator
+    spec:
+      containers:
+      - name: couchdbsyncoperator
+        image: ghcr.io/mmw-unibo/couchdbsyncoperator:latest
+        imagePullPolicy: Always
+
+# ------------------------------------------------------------------------------
+# 7. Provider Experiment
+# ------------------------------------------------------------------------------
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-experiment
+spec:
+  package: xpkg.upbound.io/mmwunibo/provider-experiment:v1.0.0
+---
+apiVersion: kubernetes.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: provider-experiment-config
+spec:
+  credentials:
+    source: None
+
+# ------------------------------------------------------------------------------
+# 8. Jenkins Service Account (per accesso OIDC)
+# ------------------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins
+  namespace: slice1experiment1
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-jenkins-token
+  namespace: slice1experiment1
+spec:
+  template:
+    spec:
+      serviceAccountName: jenkins
+      restartPolicy: OnFailure
+      containers:
+      - name: create-token
+        image: bitnami/kubectl:1.30
+        command:
+          - sh
+          - -c
+          - |
+            echo "Generating Jenkins OIDC token..."
+            kubectl create token jenkins -n slice1experiment1 --duration=24h > /tmp/jenkins.token
+            echo "Token created:"
+            cat /tmp/jenkins.token

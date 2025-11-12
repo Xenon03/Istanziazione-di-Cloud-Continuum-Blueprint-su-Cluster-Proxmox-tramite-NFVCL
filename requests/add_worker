@@ -1,0 +1,19 @@
+{
+    "areas": [
+        {
+            "area_id": 0,
+            "is_master_area": false,
+            "mgmt_net": "vmbr0",
+            "additional_networks": [],
+            "load_balancer_pools_ips": [],
+            "worker_replicas": 1,
+            "worker_flavors": {
+                "vcpu_count": "2",
+                "memory_mb": "4192",
+                "storage_gb": "64",
+                "vcpu_type": "host",
+                "require_port_security_disabled": false
+            }
+        }
+    ]
+}

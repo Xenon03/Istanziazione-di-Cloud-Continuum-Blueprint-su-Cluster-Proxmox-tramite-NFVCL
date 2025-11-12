@@ -1,0 +1,36 @@
+{
+    "cni": "calico",
+    "pod_network_cidr": "10.254.0.0/16",
+    "service_cidr": "10.200.0.0/16",
+    "topology_onboard": false,
+    "containerd_mirrors": {},
+    "password": "ubuntu",
+    "ubuntu_version": "UBUNTU24",
+    "install_plugins": true,
+    "cadvisor_node_port": 30080,
+    "master_flavors": {
+        "vcpu_count": "2",
+        "memory_mb": "5000",
+        "storage_gb": "100",
+        "vcpu_type": "host",
+        "require_port_security_disabled": false
+    },
+    "require_port_security_disabled": true,
+    "areas": [
+        {
+            "area_id": 0,
+            "is_master_area": true,
+            "mgmt_net": "vmbr0",
+            "additional_networks": [],
+            "load_balancer_pools_ips": [],
+            "worker_replicas": 1,
+            "worker_flavors": {
+                "vcpu_count": "2",
+                "memory_mb": "5000",
+                "storage_gb": "100",
+                "vcpu_type": "host",
+                "require_port_security_disabled": false
+            }
+        }
+    ]
+}

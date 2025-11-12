@@ -1,0 +1,84 @@
+{
+    "id": "topology",
+    "vims": [
+        {
+            "name": "proxmox_cluster1",
+            "vim_type": "proxmox",
+            "vim_url": "192.168.1.81",
+            "vim_user": "root",
+            "vim_password": "Angi2703",
+            "ssh_keys": [
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII5z+M17Yat+LB8wTDszhjZw8NE0PKAxv045ivJ4pEKp nfvcl_key"
+            ],
+            "vim_proxmox_parameters": {
+                "proxmox_realm": "pam",
+                "proxmox_node": "pve",
+                "proxmox_images_volume": "local",
+                "proxmox_vm_volume": "local-lvm",
+                "proxmox_token_name": "nfvcl_token",
+                "proxmox_token_value": "44ed405f-c17a-42d6-8dd2-76ab9aa12ad5"
+            },
+            "config": {
+                "insecure": true,
+                "APIversion": "v3.3",
+                "use_floating_ip": false
+            },
+            "networks": [
+                "vmbr0"
+            ],
+            "routers": [],
+            "areas": [
+                0
+            ]
+        }
+    ],
+    "kubernetes": [
+        {
+            "name": "k8s_cluster1",
+            "provided_by": "NFVCL",
+            "deployed_blueprints": [],
+            "credentials": "",
+            "vim_name": "proxmox_cluster1",
+            "k8s_version": "v1.30",
+            "networks": [
+                {
+                    "name": "vmbr0",
+                    "interface_name": "ens18",
+                    "multus_enabled": false
+                }
+            ],
+            "cni": "calico",
+            "cadvisor_node_port": 30080,
+            "nfvo_status": "not_onboarded",
+            "nfvo_onboard": false,
+            "anti_spoofing_enabled": false,
+            "areas": [
+                0
+            ]
+        }
+    ],
+    "networks": [
+        {
+            "name": "vmbr0",
+            "external": false,
+            "type": "flat", // Changed from "vlan" to "flat"
+            "bridge_name": "vmbr0", // Add the actual bridge name from Proxmox
+            "vid": 0,
+            "dhcp": true,
+            "cidr": "192.168.1.0/24",
+            "gateway_ip": "192.168.1.1",
+            "allocation_pool": [
+                {
+                    "start": "192.168.1.100",
+                    "end": "192.168.1.200"
+                }
+            ],
+            "dns_nameservers": [
+                "8.8.8.8"
+            ]
+        }
+    ],
+    "routers": [],
+    "pdus": [],
+    "prometheus_srv": []
+}
