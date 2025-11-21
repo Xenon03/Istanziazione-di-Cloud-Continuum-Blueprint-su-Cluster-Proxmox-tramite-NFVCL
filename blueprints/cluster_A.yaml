@@ -1,0 +1,167 @@
+# =========================
+# Cluster A: Cloud Continuum Base
+# =========================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: crossplane-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: slice1experiment1
+
+# --- Keycloak -----------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm
+  namespace: default
+data:
+  realm.json: |
+    {
+      "realm": "continuum",
+      "enabled": true,
+      "clients": [
+        {
+          "clientId": "clusterA",
+          "redirectUris": ["*"],
+          "publicClient": true
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:26.0.7
+        args: ["start", "--hostname-strict=false", "--import-realm"]
+        env:
+          - name: KC_BOOTSTRAP_ADMIN_USERNAME
+            value: admin
+          - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+            value: admin
+        ports:
+          - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: default
+spec:
+  selector:
+    app: keycloak
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: NodePort
+
+# --- CouchDB ------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: couchdb
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: couchdb
+  template:
+    metadata:
+      labels:
+        app: couchdb
+    spec:
+      containers:
+      - name: couchdb
+        image: couchdb:3.4.2
+        env:
+          - name: COUCHDB_USER
+            value: admin
+          - name: COUCHDB_PASSWORD
+            value: password
+        ports:
+          - containerPort: 5984
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: couchdb
+  namespace: default
+spec:
+  selector:
+    app: couchdb
+  ports:
+  - port: 5984
+    targetPort: 5984
+  type: NodePort
+
+# --- Crossplane ---------------------------------------------------
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: crossplane
+  namespace: kube-system
+spec:
+  chart: crossplane
+  repo: https://charts.crossplane.io/stable
+  targetNamespace: crossplane-system
+  createNamespace: true
+
+# --- Providers ----------------------------------------------------
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-kubernetes
+spec:
+  package: xpkg.upbound.io/crossplane/provider-kubernetes:v0.9.0
+---
+apiVersion: kubernetes.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: in-cluster
+spec:
+  credentials:
+    source: InjectedIdentity
+
+# --- CouchDB Sync Operator ----------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: couchdbsyncoperator
+  namespace: crossplane-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: couchdbsyncoperator
+  template:
+    metadata:
+      labels:
+        app: couchdbsyncoperator
+    spec:
+      containers:
+      - name: couchdbsyncoperator
+        image: ghcr.io/mmw-unibo/couchdbsyncoperator:latest
+        env:
+          - name: COUCHDB_URL
+            value: http://couchdb.default.svc.cluster.local:5984
+          - name: COUCHDB_USER
+            value: admin
+          - name: COUCHDB_PASSWORD
+            value: password
